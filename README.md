@@ -1,73 +1,83 @@
-# [ KickSync ] 대용량 트래픽을 감당하는 선착순 한정판 거래 플랫폼
+# [ KickSync ] 대용량 트래픽 및 정산 최적화 E-commerce 백엔드 플랫폼
 
 > **핵심 가치**
-> * **지속적인 아키텍처 고도화를 통해 100만 건 정산 시간을 2시간 23분 → 1분 2초 → 1.1초로 단계적 단축**하고 **트래픽 폭주 상황에서도 재고 정합성 100%를 보장**하는 고가용성 시스템을 구축했습니다.
 > 
->
+> - 가혹 인프라 제약 WAS 0.8 vCPU DB 1.0 vCPU RAM 1.5GB 환경 모사 ➔ 소프트웨어 아키텍처 튜닝 기반 시스템 물리적 임계점 및 부하 방어 성능 계측
+> - 피크 1,000 TPS 선착순 결제 부하 ➔ Read/Write 서킷 격리 및 정렬 락으로 100만 건 정산 배치 14분 16초에서 1분 9초 단축 및 가용성 100.00% 방어
 
 > **핵심 성과 요약**
-> * **배치 성능 개선:** Partitioning 및 아키텍처 재설계로 100만 건 정산 시간 **2시간 23분 → 1분 2초 → 1.1초**
-> * **동시성 제어:** `Redisson` 분산 락 도입으로 동시 접속 상황 재고 오차율 **0%** 달성 → **(초과 결제 방지)**
-> * **조회 성능 최적화:** Index 튜닝 및 Redis 캐싱을 통해 VUser 1,000명 상황에서 **TPS 2,333% 향상 (98 → 2,406)** 및 **응답 속도 96% 단축 (9.2s → 0.36s)**
 > 
->
+> - 선착순 주문 및 외부 결제 검증 ➔ SpEL ID 정렬 락과 Resilience4j Read/Write 서킷브레이커 격리로 외부 PG 장애 시 평균 지연 6.96초에서 83ms 중앙값 1.09ms 단축 및 18.5만 건 수용 627.39 TPS 통제로 시스템 가용성 100.00% 방어
+> - 대용량 배치 정산 최적화 ➔ PartnerIdPartitioner 10개 범위 파티셔닝과 커서 스트리밍 및 JVM 인메모리 Micro-batch 사전 집계와 벌크 연산 결합으로 100만 건 정산 시간 14분 16초에서 1분 9초 단축 물리 Disk Write 1.8GB에서 26.9MB 98.5% 절감 및 DB CPU 87.43%에서 16.35% 안정화
+> - 신규 발매 상품 조회 최적화 ➔ EXPLAIN ANALYZE 커버링 인덱스 Sequential I/O와 Redis Look-aside 캐싱 및 Lock-free INCR Rate Limiter 2중 통제망으로 DB CPU 점유율 44.95%에서 1.48% 통제 96.7% 부하 평탄화 및 SQL Time 0ms 기록 인프라 가용성 86.33% 확보
+> - 사내 DB 보안 AIOps 파이프라인 ➔ Air-gapped 로컬 런타임 Ollama 및 MySQL MCP Server Stdio JSON-RPC와 Ralph Loop 자율 디버깅 및 Human Gate 승인망 결합으로 LLM 스키마 환각률 0% 통제 및 개발 생산성 30% 향상
 
 <br>
 
 <div align="left">
-  <h3>API 테스트 & 문서 (Swagger UI)</h3>
+  <h3>API 테스트 & 문서 Swagger UI</h3>
   
   <a href="http://134.185.116.180/swagger-ui/index.html#/">
   <img src="https://img.shields.io/badge/Swagger_UI-Live_Test-85EA2D?style=for-the-badge&logo=swagger&logoColor=black" alt="Swagger UI" />
 </a>
 </div>
 
-> 버튼을 통해 API를 직접 호출해보실 수 있습니다.
-> 
-> 로그인 후 발급된 Access Token을 Authorize 버튼에 입력하여 테스트 가능합니다.
+> Swagger UI 기반 API 직접 호출 테스트 지원. 로그인 후 발급 Access Token Authorize 버튼 입력 테스트 가능.
 
 <br><br>
 
 ## 1. 프로젝트 소개
 
-**[ KickSync ]** 는 입점사 기반 플랫폼(KREAM, StockX)을 벤치마킹하여 대규모 트래픽과 데이터가 발생하는 환경에서의 **안정성과 성능 최적화**에 주력한 백엔드 프로젝트입니다.
+**[ KickSync ]** 대규모 트래픽 및 데이터 발생 이커머스 환경 KREAM StockX 대상 안정성 및 성능 최적화 주력 엔지니어링 백엔드 프로젝트입니다.
 
-플랫폼 성장에 따라 급증하는 트래픽과 정산 데이터를 효율적으로 처리하기 위해 **"시스템 확장성 확보"와 "데이터 정합성 보장"** 을 최우선 엔지니어링 목표로 설정했습니다.
+플랫폼 성장 에 따른 트래픽 및 정산 데이터 증가 ➔ 시스템 확장성 확보 및 데이터 정합성 보장 최우선 엔지니어링 목표 설정 통제.
 
-### 주요 기능
+### 주요 도메인 기능
 
-* **Commerce (주문 및 결제 흐름):**
-    * **동시성 제어:** 선착순 구매 시 발생하는 재고 충돌(Race Condition)을 **Redisson 분산 락**으로 제어하여 초과 주문 원천 차단
-    * **정산 시스템:** **다중 입점사 통합 결제를 위한 Order Splitting** 아키텍처 설계 및 PortOne API 교차 검증을 통한 **결제 무결성 확보**
+- Commerce 주문 및 동시성 제어
+    - 다중 락 교착 상태 Deadlock 리스크 ➔ SpEL 기반 상품 ID 오름차순 정렬 MultiLock 도입으로 데드락 방어
+    - 커밋 전 락 사전 해제 에 따른 갱신 손실 Overselling 리스크 ➔ 독립 물리 트랜잭션 분리 AOP 구축으로 데이터 정합성 확보
+    - 외부 PG 조회 장애 에 따른 연쇄 장애 리스크 ➔ Read/Write 서킷브레이커 스코프 격리 및 Read 회로 0ms Fail-Fast 차단과 결제 승인 Write 회로 1.09ms 독립 수용으로 연쇄 장애 방어
+- Settlement 입점사 100만 건 대용량 정산
+    - 멀티스레드 동시 쓰기 에 따른 InnoDB 공유 갭 락 충돌 리스크 ➔ 입점사 식별자 ID 10개 파티션 분할 및 10개 비동기 스레드 풀 분배로 갭 락 충돌 배제
+    - LIMIT/OFFSET 페이징 O(N^2) 누적 스캔 오버헤드 ➔ 커넥션 소켓 기반 O(N) 선형 순차 스트리밍 수신으로 스캔 부하 해결
+    - 건별 동기 실행 에 따른 디스크 I/O 과부하 리스크 ➔ JVM 힙 메모리 1차 사전 집계 및 Multi-Row Bulk Write 결합으로 물리 디스크 I/O 98.5% 절감
+    - 결함 데이터 에 따른 전체 배치 롤백 리스크 ➔ 최대 100회 Skip 허용 및 에러 전용 DLQ 격리로 배치 가용성 확보
+- Catalog & Shield 상품 조회 및 트래픽 방어
+    - B+Tree 세컨더리 2단 점프 Random Read I/O 오버헤드 ➔ EXPLAIN ANALYZE 기반 커버링 인덱싱 및 순차 탐색 Sequential I/O 구조로 쿼리 비용 감축
+    - 대규모 핫데이터 조회 부하 및 역직렬화 예외 리스크 ➔ Redis Look-aside 캐싱 및 Custom RestPage Wrapper 도입으로 RDBMS Avg SQL Time 0ms 평탄화
+    - 악성 트래픽 유입 부하 리스크 ➔ Redis INCR 원자 연산 기반 Lock-free Rate Limiter 배치로 HTTP 429 0ms 즉시 차단
+- AIOps & Observability 사내 보안 지능화
+    - 사내 DB 스키마 외부 유출 리스크 ➔ 100% 사내 폐쇄망 Air-gapped 로컬 런타임 Ollama 구동으로 보안 통제
+    - LLM 스키마 환각 리스크 ➔ Anthropic Model Context Protocol Stdio JSON-RPC 기반 DB 정형 스키마 메타데이터 주입으로 환각률 0% 통제
+    - 자율 디버깅 물리 반영 리스크 ➔ Ralph Loop 3회 자가 치유 피드백 및 엔지니어 1-Click Human Gate 승인망 결합으로 개발 생산성 30% 향상
 
-* **Settlement (입점사 정산 시스템):**
-    * **대용량 배치:** 크림/무신사와 같은 **입점사별 수수료 정책**을 적용하여 매일 발생하는 대규모 판매 데이터를 **Spring Batch Partitioning**으로 병렬 정산 처리
-    * **성능 최적화:** 정산 데이터 집계 시 **Bulk Insert**와 **Chunk** 지향 처리를 통해 배치 수행 시간 단축
+### 디렉토리 구조 Feature-driven Architecture
 
-* **Auth (인증 및 보안):**
-    * **Stateless:** **JWT** 기반의 인증 구조로 입점사/구매자/관리자 권한을 분리하고 **Redis**를 활용한 로그아웃(Blacklist) 및 토큰 재발급(Refresh Token) 구현
- 
-* **Architecture (분산 환경):**
-    * **데이터 일관성:** **ShedLock**으로 스케줄러 중복 실행을 방지하고 **Pub/Sub 패턴**을 도입하여 서비스 간 결합도 최소화
---------
+```
+src/main/java/be/kicksync_backend
+├── common                      # 전역 공통 인프라 및 횡단 관심사
+│   ├── annotation              # 분산 락 및 RateLimit 커스텀 어노테이션
+│   ├── aop                     # SpEL 정렬 분산 락 및 Lock-free RateLimit AOP
+│   ├── config                  # Redis Redisson Resilience4j ShedLock Swagger 설정
+│   ├── dto                     # ApiResponse RestPage 래퍼 공통 응답 규격
+│   ├── exception               # GlobalExceptionHandler 및 표준 에러 규격
+│   ├── security                # JWT 필터 및 Stateless 인증 인가
+│   └── util                    # 독립 물리 트랜잭션 분리 도우미 AopForTransaction
+└── feature                     # 도메인 주도 패키지 비즈니스 로직 응집
+    ├── order                   # 선착순 주문 Order Splitting 다중 결제 비즈니스 로직
+    ├── payment                 # 외부 PG 연동 및 Read/Write 서킷브레이커 격리 클라이언트
+    ├── settlement              # 대용량 정산 파티셔닝 커서 스트리밍 벌크 적재
+    ├── product                 # 커버링 인덱싱 Redis Look-aside 캐싱 상품 조회
+    ├── partner                 # 입점사 관리 및 수수료 정책
+    └── user                    # 회원 도메인 및 인증 처리
+```
 
 <br><br>
 
-## 2. 아키텍처 및 핵심 프로세스
+## 2. 시스템 전체 아키텍처
 
-### 2-1. 시스템 아키텍처
-
-<img width="100%" alt="KickSync System Architecture" src="https://github.com/user-attachments/assets/318e28a2-1d6c-498a-b7e0-7826d9182e79" />
-
-### 2-2. 배치 프로세스 아키텍처
-
-<img width="100%" alt="Batch Process Architecture" src="https://github.com/user-attachments/assets/7e991801-31e0-41a3-aa0e-928188e5eba3" />
-
-### 2-3. 핵심 서비스 흐름
-
-<img width="1222" height="952" alt="image" src="https://github.com/user-attachments/assets/a5dcec06-ac7e-48b3-bdfc-096b85d7f41b" />
-
---------
+<img width="1277" height="1904" alt="image" src="https://github.com/user-attachments/assets/69463fdb-89bc-45b9-a74f-ea6522ede7bf" />
 
 <br><br>
 
@@ -75,334 +85,128 @@
 
 | Category | Technology | Reason for Selection |
 | --- | --- | --- |
-| **Language** | <img src="https://img.shields.io/badge/Java_21-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white"> | Virtual Threads 등 고성능 처리를 위한 최신 기능 지원 및 안정적인 생태계 활용 |
-| **Framework** | <img src="https://img.shields.io/badge/Spring_Boot_3.5.5-6DB33F?style=for-the-badge&logo=spring&logoColor=white"> <img src="https://img.shields.io/badge/Spring_Batch-6DB33F?style=for-the-badge&logo=spring&logoColor=white"> <img src="https://img.shields.io/badge/Vue.js_3-4FC08D?style=for-the-badge&logo=vue.js&logoColor=white"> | Chunk 지향 처리를 통한 대용량 데이터의 메모리 효율성 확보 및 Job Repository 기반의 배치 실패 이력 관리 용이 |
-| **Database** | <img src="https://img.shields.io/badge/MySQL_8.0-4479A1?style=for-the-badge&logo=mysql&logoColor=white"> <img src="https://img.shields.io/badge/Redis-DC382D?style=for-the-badge&logo=redis&logoColor=white"> | ACID 트랜잭션을 통한 데이터 무결성 보장(MySQL) 및 인메모리 기반의 고속 캐싱과 분산 락 활용(Redis) |
-| **API Specs** | <img src="https://img.shields.io/badge/Swagger-85EA2D?style=for-the-badge&logo=swagger&logoColor=black"> | 즉각적인 API 테스트 및 디버깅 환경 구축과 코드 변경에 따른 문서 자동 최신화 지원 |
-| **ORM** | <img src="https://img.shields.io/badge/Spring_Data_JPA-6DB33F?style=for-the-badge&logo=spring&logoColor=white"> <img src="https://img.shields.io/badge/Hibernate-59666C?style=for-the-badge&logo=hibernate&logoColor=white"> | 객체 지향적 도메인 설계와 생산성 확보, `Bulk Insert` 등 쿼리 최적화 용이 |
-| **Infra** | <img src="https://img.shields.io/badge/Oracle_Cloud-F80000?style=for-the-badge&logo=oracle&logoColor=white"> <img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white"> | OCI 프리티어를 활용하여 비용 부담 없이 고사양(4 OCPU, 24GB RAM) 테스트 서버 구축 및 지속 가능한 운영 환경 확보 |
-| **Test & Monitor** | <img src="https://img.shields.io/badge/nGrinder-FFA500?style=for-the-badge&logo=java&logoColor=white"> <img src="https://img.shields.io/badge/Scouter-00C7B7?style=for-the-badge&logo=scouter&logoColor=white"> | 정량적 지표(TPS, Latency)를 기반으로 병목 구간을 탐지하고 최적화 성과를 검증 |
+| **Language** | <img src="https://img.shields.io/badge/Java_21-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white"> | Virtual Threads 및 ZGC 고부하 I/O 블로킹 최소화 및 힙 메모리 통제 |
+| **Framework** | <img src="https://img.shields.io/badge/Spring_Boot_3.5.5-6DB33F?style=for-the-badge&logo=spring&logoColor=white"> <img src="https://img.shields.io/badge/Spring_Batch_5-6DB33F?style=for-the-badge&logo=spring&logoColor=white"> | Chunk 지향 처리 범위 파티셔닝 기반 대용량 병렬 데이터 분산 및 Job Repository 실패 이력 관리 |
+| **Database** | <img src="https://img.shields.io/badge/MySQL_8.0-4479A1?style=for-the-badge&logo=mysql&logoColor=white"> <img src="https://img.shields.io/badge/Redis_7-DC382D?style=for-the-badge&logo=redis&logoColor=white"> | InnoDB ACID 트랜잭션 무결성 보장 Redisson 분산 락 및 Look-aside 인메모리 고속 캐싱 |
+| **Resilience & AI** | <img src="https://img.shields.io/badge/Resilience4j-000000?style=for-the-badge&logo=resilience4j&logoColor=white"> <img src="https://img.shields.io/badge/Ollama_Air_gapped-000000?style=for-the-badge&logo=ollama&logoColor=white"> <img src="https://img.shields.io/badge/Model_Context_Protocol-4B32C3?style=for-the-badge&logo=anthropic&logoColor=white"> | Read/Write 아웃바운드 서킷브레이커 스코프 격리 및 사내 폐쇄망 MCP 스키마 자동 주입 파이프라인 |
+| **ORM & Driver** | <img src="https://img.shields.io/badge/Spring_Data_JPA-6DB33F?style=for-the-badge&logo=spring&logoColor=white"> <img src="https://img.shields.io/badge/JdbcTemplate_Bulk-59666C?style=for-the-badge&logo=hibernate&logoColor=white"> | 도메인 모델링 생산성 확보 및 Multi-Row Bulk Write 결합 |
+| **Infra & CI/CD** | <img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white"> <img src="https://img.shields.io/badge/Oracle_Cloud-F80000?style=for-the-badge&logo=oracle&logoColor=white"> <img src="https://img.shields.io/badge/GitHub_Actions-2088FF?style=for-the-badge&logo=github-actions&logoColor=white"> | Docker 자원 제약 모사 기반 아키텍처 임계점 계측 및 OCI 기반 무중단 배포 파이프라인 자동화 |
+| **Test & Monitor** | <img src="https://img.shields.io/badge/k6-7D64FF?style=for-the-badge&logo=k6&logoColor=white"> <img src="https://img.shields.io/badge/Scouter_APM-00C7B7?style=for-the-badge&logo=scouter&logoColor=white"> <img src="https://img.shields.io/badge/jcmd_Telemetry-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white"> | 피크 1,000 TPS ramping 부하 인가 및 Scouter APM docker stats JDK 21 jcmd 스레드 덤프 삼각 계측 |
 
-
---------
 <br><br>
 
-## 4. 기술적 고도화
+## 4. 핵심 엔지니어링 최적화 딥다이브
 
-> **"가설 - 검증 - 개선"**: 데이터 규모 증가와 트래픽 병목을 해결하기 위해 고민하고 의사결정한 과정입니다.
+> 하드웨어 증설 없는 소프트웨어 아키텍처 튜닝 기반 물리적 병목 최적화 방어 프로세스
+> 
 
-### [ Phase 1 ] 100만 건 정산 데이터 처리 속도 136배 단축
+---
 
-**Q. 일일 100만 건의 판매 데이터를 제한된 시간 내에 정산할 수 있는가?**
+### [ Deep-Dive 1 ] 선착순 주문 및 외부 결제 동시성 최적화
 
-* **문제 상황:** 초기 `JpaPagingItemReader` 방식으로는 100만 건 처리에 **2시간 23분**이 소요되어, 정산 지연 리스크 및 Out Of Memory 위험 발생
-* **원인 분석:**
-  1. **I/O 병목:** 페이징 쿼리의 `OFFSET` 증가로 인한 DB 부하 및 `filesort` 발생
-  2. **리소스 유휴:** 단일 스레드 처리로 인한 CPU/DB 자원 활용률 저조
+**Q. 다중 상품 결제 시 다중 락 및 500ms 외부 PG 장애 상황 시스템 가용성 확보 전략**
 
-
-* **해결 과정:**
-  * **Step 1 (인덱싱):** 커버링 인덱스 적용으로 쿼리 실행 계획에서 `filesort` 제거 → **19분대 진입 (약 7.3배 개선)**
-  * **Step 2 (멀티 스레드):** `ThreadPoolTaskExecutor`를 적용했으나 성능 개선 미미 (1.1배)
-     * **Scouter 모니터링 결과 스레드 증가에도 CPU 사용률이 저조함을 확인하여** 병목의 핵심이 연산 처리가 아닌 DB I/O 대기 임을 데이터로 입증
-  * **Step 3 (파티셔닝):** **Spring Batch Partitioning**을 도입하여 데이터 범위를 분할하고 I/O를 병렬로 처리 (`GridSize=10`) → **최종 1분대 진입**
-
-
-* **최종 성과:**
-  * 처리 시간: **2시간 23분 → 1분 2초 (약 136배 단축)**
-  * 시스템 자원을 최대로 활용하며 수평적 확장이 가능한 배치 아키텍처 확보
-  * Next Step: 물리적인 I/O 병목을 근본적으로 해결하기 위해 **데이터 구조 재설계(Phase 1-1)** 진행
+- **문제 상황 AS-IS**
+    - SpEL 다중 락 키 정렬 누락 에 따른 다중 스레드 교착 상태 Deadlock 리스크 ➔ 톰캣 스레드 200개 정체 현상 확인
+    - 트랜잭션 커밋 전 락 조기 해제 에 따른 갱신 손실 초과 판매 리스크 ➔ 데이터 정합성 훼손 현상 식별
+    - 외부 결제 API DB 트랜잭션 강결합 에 따른 커넥션 풀 전면 고갈 리스크 ➔ 인증 필터 조회 타임아웃 연쇄 장애 및 가용성 0.00% 하락
     
-  * **정량적 성과**
-    | 최적화 단계 | 실행 시간 (100만 건) | 이전 대비 향상 | 핵심 성과 |
-    | --- | --- | --- | --- |
-    | **1. Paging Reader** | 2시간 23분 | - | 메모리 안정성 확보하였으나 **I/O 병목 발생** |
-    | **2. + 커버링 인덱스** | 19분 34초 | **7.3배** | `filesort` 제거 및 **I/O 최적화 기반 마련** |
-    | **3. + 멀티 스레드** | 17분 37초 | **1.1배** | CPU 병렬 처리 한계 확인 → **I/O가 핵심 병목임을 증명** |
-    | **4. + 파티셔닝** | **1분 2초** | **18.9배** | **I/O 병렬 처리로 병목 해결**, 수평적 확장성 확보 |
+  <br>
+    <img width="1371" height="1191" alt="image" src="https://github.com/user-attachments/assets/113a20d5-bd93-46f8-bff4-6e64e49f8920" />
+    <img width="1682" height="1541" alt="image" src="https://github.com/user-attachments/assets/af73b0f2-4837-4395-a26c-869e9c526962" />
 
-   - **OOM 발생부터 파티셔닝 적용까지의 전체 과정**: [Velog 포스팅 바로가기](https://velog.io/@gminnimk/Batch-System)
-      - **주요 내용**: `JpaPagingItemReader` 한계 분석, 커버링 인덱스 적용 전후 비교, 멀티 스레드 vs 파티셔닝 비교
+- **해결 전략 및 아키텍처**
+    - SpEL ID 정렬 락 ➔ 상품 ID 오름차순 정렬 락 획득 강제로 교착 상태 발생 가능성 배제 및 Redis CPU 4.16%에서 2.15% 추가 절감
+    - 트랜잭션 생명주기 분리 ➔ 독립 물리 트랜잭션 비즈니스 메소드 가동 및 커밋 완료 후 언락 실행으로 초과 판매 오류 해결
+    - 외부 API 트랜잭션 외부 분리 ➔ 500ms 네트워크 연동 대기 시간 외부 격리로 DB 커넥션 점유 시간 단축 통제
+    - Resilience4j Read/Write 서킷브레이커 스코프 격리 ➔ 외부 PG 장애 시 Read 0ms Fail-Fast 차단 및 결제 승인 Write 1.09ms 독립 수용으로 연쇄 장애 방어
+- **정량적 실측 성과 5분간 500 VUs 피크 스트레스 계측**
+    - 평균 응답 지연 ➔ 6,960ms에서 83.03ms 중앙값 1.09ms P95 513ms 98.8% 단축
+    - 총 처리량 ➔ 19,307건에서 185,692건 평균 627.39 TPS 9.6배 향상
+    - 자원 부하 점유율 ➔ WAS CPU 48.13% 및 DB CPU 0.56% 통제로 84.1% 부하 평탄화
+    - 데이터 정합성 및 가용성 ➔ 초과 판매 0건 오차율 0.00% 및 Error Rate 0.00% 기반 시스템 가용성 100.00% 확보
 
-<br>
+---
 
-### [ Phase 1-1 ] 아키텍처 재설계: 비즈니스 확장성과 조회 성능의 동시 확보
-> **"Read 성능을 위해 Write 시점의 구조와 비즈니스 로직을 최적화하다"**
+### [ Deep-Dive 2 ] 입점사별 100만 건 대용량 정산 최적화
 
-파티셔닝으로 1분대 진입에는 성공했으나, **'다중 입점사 결제 시 정산 데이터의 정합성'** 과 **'대규모 트래픽에서의 조회 효율성'** 을 동시에 해결하기 위한 고도화 과정입니다.
+**Q. 100만 건 대용량 결제 데이터 한정 자원 기반 메모리 누수 및 디스크 I/O 병목 해결 전략**
 
+- **문제 상황 AS-IS**
+    - LIMIT/OFFSET 페이징 후반부 접근 에 따른 데이터 누적 스캔 리스크 ➔ O(N^2) 누적 스캔 부하 및 SQL Time 774초 소요 현상 확인
+    - 단건 동기 실행 반복 에 따른 물리 디스크 fsync 시스템 콜 과부하 리스크 ➔ 1.8GB Disk Write 과부하 발생
+    - 복합 유니크 제약조건 멀티스레드 동시 쓰기 에 따른 공유 갭 락 충돌 리스크 ➔ 커넥션 누수 경보 및 DB CPU 87.43% 포화 현상 식별
+    
+  <br>
+    <img width="1360" height="1672" alt="image" src="https://github.com/user-attachments/assets/9a7e76d0-a643-45f2-a8d3-ab650fae93bf" />
 
-#### **Q. 기존 구조는 대규모 다중 파트너 정산을 수용할 수 있는가? (한계점 발견)**
+- **해결 전략 및 아키텍처**
+    - 범위 기반 PartnerIdPartitioner 파티셔닝 ➔ 파티션 물리 격리 10개 병렬 비동기 스레드 분배로 갭 락 경합 및 데드락 가능성 배제
+    - JdbcCursorItemReader 선형 Cursor Streaming ➔ 커넥션 소켓 유지 단건 순차 스트리밍 수신으로 O(N) 선형 스캔 보장
+    - JVM 인메모리 Micro-batch 사전 집계 ➔ 청크 데이터 힙 메모리 1차 누적합 집계로 DML 요청 수 99% 삭감 통제
+    - JDBC 드라이버 벌크 쿼리 옵션 ➔ 다중 쿼리 Multi-Row INSERT 재작성 송신으로 물리 디스크 쓰기량 1.8GB에서 26.9MB 98.5% 절감
+    - Fault Tolerant 및 DLQ 가드레일 ➔ 결함 데이터 식별 시 최대 100회 Skip 허용 및 에러 전용 DLQ 테이블 자동 격리로 전체 롤백 방어
+- **정량적 실측 성과 100만 건 정산 벤치마크 계측**
+    - 총 소요 시간 ➔ 14분 16.29초에서 1분 9.49초 12.3배 단축
+    - DB CPU 점유율 ➔ 최대 87.43%에서 평균 16.35% 71.08%p 안정화
+    - WAS CPU 가동률 ➔ 평균 16%에서 평균 80.02% 연산 속도 치환 확보
+    - 물리 Disk Write I/O ➔ 1.8GB에서 26.9MB 98.5% 삭감
+    - SQL Time ➔ 774,656ms 100만 회에서 104ms 33회 99.9% 삭감
+    - 정합성 및 가동률 ➔ 정산 금액 150억 원 정합성 100% 일치 및 배치 가동률 100.00% 통제
 
-* **비즈니스 제약:** 기존 `Payment`(결제) 중심 구조는 엔티티 내 `PartnerId`가 단일 필드로 존재해 '한 번의 결제에 여러 입점사 상품이 포함된 경우'를 수용하지 못하는 구조적 결함 확인
-* **성능 병목:** 결제일과 취소일을 동시에 고려하는 복잡한 `OR` 조건(결제 합산 - 취소 차감)이 파티셔닝 범위와 결합될 때 인덱스 효율이 저하되어 조회 비용 증가
-* **Risk:** 데이터 규모 확장 시 쿼리 비용이 기하급수적으로 증가하여 Read I/O 병목이 필연적으로 발생하는 구조
+---
 
+### [ Deep-Dive 3 ] 신규 발매 상품 조회 최적화
 
-#### **해결 전략: 기술과 비즈니스의 동기화**
+**Q. 인기 상품 발매 시 조회 트래픽 폭증 에 따른 500만 건 테이블 RDBMS 물리 한계 극복 전략**
 
-1.  **도메인 모델 재설계:** "정산의 주체는 결제가 아닌 주문이다" → 주문 생성 시점에 입점사별로 주문을 분리 저장하는 아키텍처 도입
-2.  **비즈니스 로직 최적화:** 복잡한 실시간 차감 로직을 제거하고 **'구매 확정'**된 주문만 조회하는 단순 명료한 로직으로 변경하여 DB 부하 최소화
-3.  **반정규화 및 커버링 인덱스:** 정산 필수 데이터(`PartnerId`, `Status`, `OrderDate`, `Price`)만을 포함한 최적화된 인덱스를 구성하여 **Covering Index Scan** 유도
-
-#### **[ 구조 및 로직 변경으로 56배 더 빨라진 이유 ]**
-
-| 구분 | Before (Payment 중심/실시간) | After (Order 중심/구매확정) | 핵심 차이 |
-| :--- | :--- | :--- | :--- |
-| **정산 관점** | "결제 건 집계 - 취소 건 차감" | "구매 확정 건 단순 집계" | 로직 복잡도 최소화 |
-| **확장성** | 다중 입점사 처리 불가 (1:1 제약) | **다중 입점사 수용 (1:N 분리)** | 유연한 비즈니스 확장 |
-| **조회 방식** | 인덱스 미적용/비효율 (Full Scan) | **커버링 인덱스 (Index Only)** | 조회 비용 'Zero'화 |
-| **최적화** | 복잡한 쿼리로 인한 Read 병목 | 데이터 정렬 및 단순 Range Scan | Read 속도 극대화 |
-
-
-#### **최종 성과**
-**다중 입점사 결제 지원 및 정산 원천 데이터 조회 비용을 '제로'에 가깝게 최적화**
-
-* **처리 시간:** 1분 2초 → **1.1초** (약 56배 추가 단축)
-* **Phase 1 초기 대비 총 개선율:** 2시간 23분 → 1.1초(1174ms)
-
-
-<br>
-
-### **< 파티셔닝 아키텍처 구조도 >**
-
-<img width="1211" height="1001" alt="image" src="https://github.com/user-attachments/assets/c7bd7827-308e-4415-a2a2-eead19f9bb46" />
-
-<br><br><br>
-
-### [ Phase 2 ] 동시 접속 상황에서의 재고 정합성 100% 보장
-
-**Q. 인기 상품 발매 시, 0.1초 만에 몰리는 동시 주문을 DB가 감당할 수 있는가?**
-
-* **문제 상황**
-    * **Race Condition 발생:** nGrinder VUser 500명 동시 주문 테스트 결과 재고가 음수(-N)로 떨어지는 **초과 판매** 현상 확인
-    * **비즈니스 리스크:** 실제 서비스였다면 환불 처리 비용 증가 및 사용자 신뢰도 하락으로 직결될 심각한 비즈니스 결함 식별
-
-* **기술적 의사결정:**
-  * **1. 동시성 제어 방식 선정:**
-    * **Java Synchronized:** 다중 서버 환경(Scale-out)에서 인스턴스 간 동기화 불가 → **[기각]**
-    * **Pessimistic Lock (DB):** 확실한 데이터 보호는 가능하나 데드락 위험 및 대기 시간 증가로 인한 트래픽 병목 우려 → **[보류]**
-    * **Redis Distributed Lock (Redisson):** Pub/Sub 방식을 사용하여 Redis 부하를 줄이면서 분산 환경 제어 가능 → **[채택]**
-  
-  * **2. Lock 라이브러리 선정 (Letturce vs Redisson):**
-    * **Lettuce:** Spin Lock 방식으로 락 획득 재시도 시 Redis에 과도한 트래픽 부하 유발
-    * **Redisson:** **Pub/Sub 방식**을 지원하여 락 해제 시에만 클라이언트에 알림을 보내는 방식으로 **Redis 부하 최소화 및 대기 효율성 증대**
-   
-  * **3. 트랜잭션 정합성 확보 (AOP):**
-    * **문제:** `@Transactional` AOP가 락 해제보다 늦게 커밋될 경우 다른 스레드가 변경 전 데이터를 읽는 데이터 불일치 발생
-    * **해결:** **Custom AOP**를 도입하여 **'락 획득 → 트랜잭션 시작 → 커밋 → 락 해제'** 순서를 강제함으로써 동시성 이슈 원천 차단
-
-* **검증 결과:**
-  * 동시 요청 500건 테스트 시 **재고 오차 0건** 달성 (정합성 100%)
-  * `WaitTime`과 `LeaseTime` 설정을 통해 데드락 방지 및 UX(대기 시간) 고려
-
-<br>
-
-> <details>
-> <summary><strong>Redisson 락 동작 로그 및 테스트 환경 보기</strong></summary>
-> <div markdown="1">
-> <br>
-> 
-> **1. Redisson 락 동작 로그**
->
-> ```log
-> // 1. 정상 주문 처리: 락 획득 -> 재고 차감 -> 락 해제
-> 18:07:57 INFO [DistributedLockAop] : [Redisson Lock] 락 획득 성공: [LOCK:product:1] (User=178)
-> 18:08:02 INFO [OrderService]       : [CONCURRENCY_TEST] 재고 차감: User=178, 남은 재고=9
-> 18:08:02 INFO [DistributedLockAop] : [Redisson Lock] 락 해제 완료: [LOCK:product:1] (User=178)
-> 
-> // 2. 동시성 환경 재고 소진 과정 (Race Condition 제어)
-> 18:08:05 INFO [OrderService]       : [CONCURRENCY_TEST] 재고 차감: User=189, 남은 재고=8
-> 18:08:05 INFO [OrderService]       : [CONCURRENCY_TEST] 재고 차감: User=13,  남은 재고=7
-> ...
-> 18:08:06 INFO [OrderService]       : [CONCURRENCY_TEST] 재고 차감: User=36,  남은 재고=0
-> 18:08:06 INFO [DistributedLockAop] : [Redisson Lock] 락 해제 완료: [LOCK:product:1] (User=36)
-> 
-> // 3. 재고 소진 후 접근 시: 락 획득 후 즉시 예외 발생 (Fail-fast)
-> 18:08:06 INFO [DistributedLockAop] : [Redisson Lock] 락 획득 성공: [LOCK:product:1] (User=381)
-> 18:08:06 WARN [GlobalExceptionHandler] : CustomException: [INSUFFICIENT_STOCK] 재고가 부족합니다.
-> 18:08:06 INFO [DistributedLockAop] : [Redisson Lock] 락 해제 완료: [LOCK:product:1] (User=381)
-> ```
-> <br>
->
-> **2. nGrinder 테스트 환경**
-> 
-> <img width="100%" alt="image" src="https://github.com/user-attachments/assets/13bb98f2-ee53-4533-b184-c9e1f136ef4a" />
->
-> </div>
-> </details>
-
-### **< 분산 락 시퀀스 다이어그램 (Lock Facade) >**
-<img width="950" height="740" alt="image" src="https://github.com/user-attachments/assets/46908311-ec98-4e45-af47-d942936be787" />
-
-<br>
-
-   <br><br>
-
-### [ Phase 3 ] 조회 성능 24배 개선: 인덱스 튜닝의 한계 극복과 Redis 도입
-
-#### **Q. 신규 발매 탭 조회 급증 시, 수천 명의 동시 접속 트래픽을 DB가 감당할 수 있는가?**
-
-#### **1. 테스트 환경**
-* **Hardware:** Apple M1 (Local Environment) / Tomcat Thread 200
-* **Data Volume:** 상품 데이터 50,000건
-* **Scenario:** 상품 목록 1페이지(40건) 조회 / 최신순 정렬 (`ORDER BY release_date DESC`)
-* **Load Profile:**
-    * **VUser:** Max 1,000명
-    * **Ramp-Up:** 10초마다 100명씩 단계적 투입
-
-#### **2. 문제 인식 및 해결 과정**
-
-* **문제 상황**
-  * **서비스 불능:** 인기 상품 발매 직후 트래픽 급증 시나리오(VUser 1,000)에서 평균 응답 시간 **9.2초** 기록 및 DB 커넥션 고갈 발생
-  * **리소스 병목:** `release_date` 정렬 시 인덱스 부재로 인한 **Full Table Scan 및 Filesort**가 DB CPU 100% 점유
-
-* **[Step 1] 1차 시도: DB 인덱스 튜닝**
-    * **조치:** `release_date` 인덱스 생성 후 재테스트 수행
-    * **결과:** 응답 시간 2.8초로 단축되었으나 여전히 TPS 322에 머무름
-    * **판단:** 인덱스 적용으로 쿼리 실행 계획은 개선되었으나 대용량 동시 접속 시 발생하는 **물리적 Disk I/O 한계 및 DB Connection Pool 경합** 해소 한계 확인
-
-* **[Step 2] 최종 해결: Redis 캐싱 도입 (Look-aside)**
-    * **전략:**
-        * **DB 부하 제거:** 트래픽의 80%가 집중되는 **1페이지(Hot Data)** 를 Redis에 캐싱하여 DB I/O 부하를 제거 (**TTL 10분**)
-        * **Fail-safe 확보:** 인덱스는 Cache Miss 발생 시 DB 과부하를 막는 안전장치 및 하위 페이지 조회를 위해 유지
-        * **정합성 관리:** `@CacheEvict` 활용하여 상품 정보 수정 시 캐시 즉시 무효화로 데이터 최신성 유지
+- **문제 상황 AS-IS**
+    - B+Tree 세컨더리 인덱스 스캔 후 PK 클러스터드 인덱스 재탐색 에 따른 Random Read I/O 리스크 ➔ 단일 SQL 평균 32ms 지연 발생
+    - 커넥션 풀 반납 실패 에 따른 톰캣 스레드 134개 대기 정체 리스크 ➔ 응답 지연 최장 9.0초 연장 확인
+    - 지연 요청 객체 누적 에 따른 ZGC STW 스파이크 리스크 ➔ 힙 메모리 1,000MB 도달 및 가용성 82.88% 붕괴 현상 식별
+    
+    <br>
+      <img width="1358" height="1407" alt="image" src="https://github.com/user-attachments/assets/d1e06708-49c6-4377-b4b8-574a50ce131a" />
 
 
-#### **3. 검증 결과**
-
-* **정량적 성과 (nGrinder 부하 테스트 결과)**
-
-| 지표 | Step 1. DB Only | Step 2. Index | **Step 3. Caching** | **최종 개선율** |
-| --- | --- | --- | --- | --- |
-| **TPS (평균 처리량)** | 98.9 | 322.5 | **2,406.3** | **24배 향상** |
-| **Peak TPS (최대 처리량)** | 122.0 | 406.0 | **2,738.0** | **22배 향상** |
-| **Mean Test Time (평균 응답 시간)** | 9,212.7 ms | 2,836.7 ms | **364.9 ms** | **96% 단축** |
-| **Total Executed (총 처리)** | 58,109 건 | 189,434 건 | **1,414,565 건** | **24배 증가** |
-| **Error Rate** | 1 건 | 0 건 | 379 건 | - |
-
-> (\*) *Redis 적용 시 발생한 에러 379건은 TPS 폭증으로 인한 로컬 테스트 환경의 네트워크 포트 고갈 이슈로 확인*
-   
-   > <details>
-   > <summary><strong>[성능 지표] nGrinder 부하 테스트 상세 그래프 확인하기</strong></summary>
-   > <div markdown="1">
-   > <br>
-   >
-   > #### 페이징 조회 (40건)
-   >
-   > **[ Step 1. DB Only (No Index) ] - 서비스 붕괴**
-   > 
-   ><img width="2048" height="614" alt="image" src="https://github.com/user-attachments/assets/9354df12-abeb-4880-8c64-ae9110c0a223" />
-   >
-   > **[ Step 2. Index Tuning ] - 성능 개선되었으나 여전히 병목 존재**
-   > 
-   > <img width="2048" height="615" alt="image" src="https://github.com/user-attachments/assets/71e6f898-5ae1-4cc7-a399-4b36c401b95a" />
-   >
-   > **[ Step 3. Redis Caching ] - 압도적인 처리량 및 응답 속도 확보**
-   > 
-   > <img width="2048" height="602" alt="image" src="https://github.com/user-attachments/assets/871381ef-105b-4d1a-aa80-a9dbe8145e0d" />
-   > </div>
-   > </details>
-
---------
+- **해결 전략 및 아키텍처**
+    - EXPLAIN ANALYZE 기반 커버링 인덱싱 ➔ Select절 컬럼 복합 인덱스 100% 포함 및 순차 탐색 Sequential I/O 구조로 쿼리 비용 감축
+    - Look-aside 캐싱 및 Custom RestPage Wrapper ➔ 메인 조회 Redis 캐시 우회 및 직렬화 오류 해결로 RDBMS Avg SQL Time 0ms 평탄화
+    - Lock-free Rate Limiter ➔ 서비스 진입점 Redis INCR 원자 연산 제어 배치로 악성 트래픽 HTTP 429 0ms 즉시 차단
+    - Java 21 jcmd 인라인 도구 계측 ➔ WAS 컨테이너 내부 jcmd 및 jstack 직접 호출 우회 경로 구축으로 락 메트릭 누수 수집 방어
+- **정량적 실측 성과 500 VUs 피크 1,000 TPS 부하 계측**
+    - DB CPU 점유율 ➔ 44.95%에서 평균 1.48% 최대 24.11% 통제로 96.7% 부하 평탄화
+    - RDBMS Avg SQL Time ➔ 32ms에서 0ms Flatline DB 쿼리 부하 소거
+    - 총 처리량 ➔ 50,484건에서 58,902건 16.7% 향상
+    - 응답 대역 ➔ 최장 9.0s에서 0.50초 이하 띠 형성 94.4% 실질 단축
+    - 스레드 락 메트릭 ➔ 대기 스레드 134개에서 0개 및 동기화 락 경합 69개에서 0개 완전 해소
+    - 인프라 가용성 ➔ 82.88%에서 86.33% HTTP 429 0ms 방어
+ 
 <br><br>
 
-## 5. 트러블 슈팅
+## 5. 트러블 슈팅 및 설계 회고
 
-### 1. 분산 환경에서의 스케줄러 중복 실행 방지 (ShedLock)
+### 1. SpEL 파싱 기반 정렬 락 단일 다중 분기 튜닝
 
-* **문제 상황:** 서비스 규모 확장을 위해 **Scale-out(다중 서버) 환경 도입 후** 동일 스케줄러의 중복 실행으로 인한 **정산 데이터 중복 적재 및 무결성 훼손** 발생
+- 다중 상품 주문 데드락 방어 목적 MultiLock 적용 시 단일 상품 주문 호출 에 따른 Redis CPU 오버헤드 증가 리스크 ➔ 단일 RLock 우회 분기 설계로 Redis CPU 점유율 4.16%에서 2.15% 48.3% 추가 절감
 
-* **기술적 의사결정:**
-   * **대안 비교:** 별도의 배치 서버(Jenkins, Airflow) 구축 vs DB 기반 락(ShedLock) 도입
-   * **판단 근거:**
-      * 현재 프로젝트 규모에서 관리 포인트가 늘어나는 별도 인프라 구축은 **오버 엔지니어링**이라 판단했습니다.
-      * RDBMS는 이미 가용 중인 자원이므로 추가 비용 없이 메타데이터 테이블만으로 락 관리가 가능한 **ShedLock**을 채택하여 경량화된 아키텍처를 유지했습니다.
+### 2. 분산 환경 스케줄러 중복 실행 방지
 
-* **해결 및 결과:** ShedLock 도입을 통해 인스턴스 수와 무관하게 **단일 서버 수행을 보장**하고 데**이터 무결성**을 확보
-<br>
+- 다중 인스턴스 Scale-out 환경 동일 정산 배치 중복 실행 에 따른 레이스 컨디션 리스크 ➔ RDBMS 메타데이터 기반 ShedLock 채택으로 추가 인프라 비용 없이 단일 리더 실행 무결성 확보
 
+### 3. Java 21 Scouter APM Attach API 호환 한계 극복
 
-### 2. 정산 데이터 적재 성능 최적화 (JPA vs JDBC)
+- Java 21 가상 스레드 환경 JDK 9 모듈화 제약 에 따른 APM 스레드 덤프 추출 예외 발생 한계 ➔ WAS 컨테이너 내부 런타임 접속 및 JDK 21 표준 진단 도구 jcmd jstack 직접 호출 독립 수집 경로 구축으로 고부하 환경 스레드 락 메트릭 정밀 분석 통제
 
-* **테스트 배경:** 배치 시스템 고도화 전 데이터 적재 단계의 병목 지점을 파악하기 위해 10만 건 데이터로 단위 성능 테스트 진행
-
-* **문제 상황:** JPA `saveAll()` 사용 시 10만 건 저장에 약 **20초** 소요
-
-* **원인 분석:**
-    * MySQL `IDENTITY` 전략 사용 시 JPA는 PK 값을 확보하기 위해 Insert 쿼리를 매번 단건으로 실행
-    * 이로 인해 **Batch Insert 최적화 불가** 확인
-
-* **기술적 의사결정:**
-    * **Trade-off:** JPA 편의성(1차 캐시, Dirty Checking) 포기 vs 대용량 처리 속도 확보
-    * **판단 근거:**
-      * 정산 데이터 저장은 조회/수정이 동반되지 않는 **Write-only** 작업
-      * 영속성 컨텍스트 관리 비용을 지불하는 것보다 쿼리를 단일 패킷으로 묶어 보내는 JDBC 처리 속도가 비즈니스적으로 더 효율적이라 판단
-
-* **검증 결과:** `JdbcTemplate` 활용 Bulk Insert 전환으로 처리 시간 **20.2s → 0.67s (약 96% 성능 개선)** 달성
-
-* **Current Status & Roadmap:**
-    * **Current:** 파티셔닝과 도메인 최적화를 결합하여 OOM 방지 및 100만 건 정산 속도 **1.1초** 달성 (안정적 운영 궤도 진입)
-    * **Roadmap:** 파티셔닝 구조에 검증된 JDBC Batch 기술을 결합(`JdbcBatchItemWriter` 도입)하여 **DB I/O 부하 추가 감소** 계획
-
-
---------
 <br><br>
 
+## 6. ERD 데이터베이스 모델링
 
-## 6. 설계 회고 및 한계 분석
+<img width="897" height="755" alt="image" src="https://github.com/user-attachments/assets/795df007-f910-40dd-ab6b-1498c5d6cd0b" />
 
-### 1. 배치 처리의 자원 격리 전략과 한계
-
-* **설계 전략:**
-     * **Time-Window Scheduling:**
-       * 100만 건 이상의 대량 데이터를 처리하는 파티셔닝 로직은 CPU와 Disk I/O를 집중적으로 사용합니다. 이를 고려해 실사용자 트래픽이 가장 적은 **새벽 04:00**에 배치를 실행하여 온라인 서비스의 성능 저하를 방지했습니다.
-     * **GridSize 최적화:** DB Connection Pool의 여유분을 계산하여 `GridSize=10`으로 설정하여 자원을 최대한 활용하되 고갈시키지 않도록 제한했습니다.
-
-* **한계 및 리스크:**
-     * 현재 구조는 온라인 DB와 배치 처리가 **물리적으로 같은 DB 자원**을 공유합니다.
-     * 만약 데이터가 1,000만 건 이상으로 급증하여 배치 수행 시간이 길어질 경우 아침 시간대 실사용자 트래픽과 경합이 발생할 위험이 있습니다.
-
-* **향후 개선안:**
-     * **Reader DB 분리:** 배치 작업은 읽기 전용 복제본(Slave DB)에서 수행하여 Master DB의 부하를 제거하는 구조로 개선할 계획입니다.
-
-<br>
-
-### 2. Redis 강결합 구조와 단일 장애 지점 리스크 관리
-
-* **설계 전략:** 재고 정합성을 위해 `Redisson` 분산 락을 도입했습니다. DB 락 대비 가볍고 빠른 처리가 가능하여 트래픽 폭주 상황에서도 안정적인 응답 속도를 확보했습니다.
-
-* **한계:**
-     * **단일 장애 지점:** 주문 로직이 Redis에 강하게 의존하고 있어 Redis 서버 장애 시 주문 기능 전체가 마비될 리스크가 있습니다.
-
-* **향후 개선안:**
-     * **Fallback 메커니즘 구축:** Redis 장애 시 DB 비관적 락으로 자동 전환되는 Fallback 프로세스 구현하여 성능 Trade-off를 감수하더라도 주문 서비스의 가용성을 확보할 예정입니다.
-     * **Redis Cluster:** 단일 노드가 아닌 클러스터 구성을 통해 고가용성을 물리적으로 확보해야 함을 인지했습니다.
-
-<br>
-
-### 3. 데이터 무결성과 성능 사이의 Trade-off (캐싱)
-
-* **설계 전략**
-    * '상품 목록 조회'는 재고 수량처럼 엄격한 정합성이 요구되는 영역이 아닌 다수 사용자에게 빠르게 노출되어야 하는 전시 도메인입니다.
-    * 미세한 데이터 반영 지연보다 **응답 속도 확보와 DB 보호**가 비즈니스적으로 더 중요하다고 판단하여 최종 일관성 모델 수용 및 Look-aside 전략을 채택했습니다.
-
-* **한계 및 리스크**
-    * `@CacheEvict` 적용에도 불구하고 네트워크 지연 등으로 캐시 갱신 실패 시 DB와 캐시 간 일시적 데이터 불일치 발생 가능성이 존재합니다.
-
-* **향후 개선안**
-    * 정합성 튜닝: 데이터 불일치 허용 범위를 명확히 정의 및 만료 시간을 짧게 유지하되 **Refresh-Ahead** 전략을 혼합하여 정합성과 성능의 균형점을 지속적으로 최적화할 계획입니다.
-    * Retry 메커니즘: 캐시 갱신 실패 시 재시도 로직을 도입하거나 이벤트 기반의 비동기 처리를 도입하여 메인 로직의 성능 저하 없이 데이터 정합성을 확보하는 방안을 계획 중입니다.
-
---------
 <br><br>
 
-## 7. ERD
+## 7. 인프라 운영 및 CI/CD 파이프라인
 
-<img width="2400" height="1582" alt="image" src="https://github.com/user-attachments/assets/176389bd-f7ea-4bd8-a30f-0e08b778ae92" />
-
-* **[ ERD Cloud 링크 바로가기 ](https://www.erdcloud.com/d/B5xBxsPqkP4uwSPt4)**
-
---------
-<br><br>
-
+- 컨테이너 가상화 ➔ Docker Compose 기반 WAS MySQL Redis 단일 노드 격리 배포 및 물리 자원 엄격 제한으로 프로덕션 부하 임계점 모사 통제
+- 배포 자동화 ➔ GitHub Actions 연동 main 브랜치 주입 시 빌드 및 OCI 인스턴스 자동 배포 파이프라인 확보
